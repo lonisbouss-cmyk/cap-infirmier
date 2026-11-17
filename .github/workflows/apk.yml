@@ -27,15 +27,16 @@ jobs:
             fs.mkdirSync(path.dirname(f), { recursive: true });
             fs.writeFileSync(f, v.contents);
           }
-          fs.writeFileSync('package.json', JSON.stringify({ name: 'cap-infirmier', version: '1.1.0', private: true, main: 'apk-entry.js', dependencies: { expo: '~55.0.0' } }, null, 2));
+          fs.writeFileSync('package.json', JSON.stringify({ name: 'cap-infirmier', version: '1.1.0', private: true, main: 'apk-entry.js', dependencies: { expo: '~55.0.0', react: '19.2.0', 'react-native': '0.83.10', 'expo-status-bar': '~55.0.6', '@react-native-async-storage/async-storage': '2.2.0' } }, null, 2));
           console.log(fs.readdirSync('.'));
           "
       - name: Installer les dependances
         working-directory: app
         run: |
+          echo "legacy-peer-deps=true" > .npmrc
           npm install
-          npx expo install react react-native expo-status-bar @react-native-async-storage/async-storage
           npx expo install --fix || true
+          npm ls react react-native expo || true
       - name: Preparer le projet Android
         working-directory: app
         run: CI=1 npx expo prebuild --platform android
