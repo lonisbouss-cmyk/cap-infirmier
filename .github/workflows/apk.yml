@@ -1,0 +1,49 @@
+name: Fabriquer l'APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Recuperer le code du Snack (derniere version enregistree)
+        run: |
+          mkdir app && cd app
+          curl -sSf -H "Snack-Api-Version: 3.0.0" "https://exp.host/--/api/v2/snack/@lonis57/cap-infirmier" -o snack.json
+          node -e "
+          const fs = require('fs'); const path = require('path');
+          const s = JSON.parse(fs.readFileSync('snack.json', 'utf8'));
+          for (const [f, v] of Object.entries(s.code)) {
+            if (f === 'package.json' || f === 'eas.json' || v.type === 'ASSET' || !v.contents) continue;
+            fs.mkdirSync(path.dirname(f), { recursive: true });
+            fs.writeFileSync(f, v.contents);
+          }
+          fs.writeFileSync('package.json', JSON.stringify({ name: 'cap-infirmier', version: '1.1.0', private: true, main: 'apk-entry.js', dependencies: { expo: '~55.0.0' } }, null, 2));
+          console.log(fs.readdirSync('.'));
+          "
+      - name: Installer les dependances
+        working-directory: app
+        run: |
+          npm install
+          npx expo install react react-native expo-status-bar @react-native-async-storage/async-storage
+          npx expo install --fix || true
+      - name: Preparer le projet Android
+        working-directory: app
+        run: CI=1 npx expo prebuild --platform android
+      - name: Compiler l'APK
+        working-directory: app/android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+      - name: Mettre l'APK a disposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: CAP-Infirmier-APK
+          path: app/android/app/build/outputs/apk/release/app-release.apk
