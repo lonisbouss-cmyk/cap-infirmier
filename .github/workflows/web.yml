@@ -1,0 +1,58 @@
+name: Publier la version web
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Recuperer le code du Snack (derniere version enregistree)
+        run: |
+          mkdir app && cd app
+          curl -sSf -H "Snack-Api-Version: 3.0.0" "https://exp.host/--/api/v2/snack/@lonis57/cap-infirmier" -o snack.json
+          node -e "
+          const fs = require('fs'); const path = require('path');
+          const s = JSON.parse(fs.readFileSync('snack.json', 'utf8'));
+          for (const [f, v] of Object.entries(s.code)) {
+            if (f === 'package.json' || f === 'eas.json' || v.type === 'ASSET' || !v.contents) continue;
+            fs.mkdirSync(path.dirname(f), { recursive: true });
+            fs.writeFileSync(f, v.contents);
+          }
+          fs.writeFileSync('package.json', JSON.stringify({ name: 'cap-infirmier', version: '1.2.0', private: true, main: 'apk-entry.js', dependencies: { expo: '~55.0.0', react: '19.2.0', 'react-native': '0.83.10', 'expo-status-bar': '~55.0.6', '@react-native-async-storage/async-storage': '2.2.0' } }, null, 2));
+          const a = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          a.expo.experiments = Object.assign({}, a.expo.experiments, { baseUrl: '/cap-infirmier' });
+          a.expo.web = Object.assign({}, a.expo.web, { output: 'single', bundler: 'metro', name: 'CAP Infirmier', shortName: 'CAP Infirmier', backgroundColor: '#0b1220', themeColor: '#0b1220' });
+          fs.writeFileSync('app.json', JSON.stringify(a, null, 2));
+          "
+      - name: Installer les dependances
+        working-directory: app
+        run: |
+          echo "legacy-peer-deps=true" > .npmrc
+          npm install
+          npx expo install react-dom react-native-web @expo/metro-runtime
+          npx expo install --fix || true
+      - name: Exporter la version web
+        working-directory: app
+        run: |
+          npx expo export --platform web
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
