@@ -3,13 +3,15 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  schedule:
+    - cron: '*/20 * * * *'
 permissions:
   contents: read
   pages: write
   id-token: write
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   web:
     runs-on: ubuntu-latest
@@ -37,8 +39,19 @@ jobs:
           a.expo.experiments = Object.assign({}, a.expo.experiments, { baseUrl: '/cap-infirmier' });
           a.expo.web = Object.assign({}, a.expo.web, { output: 'single', bundler: 'metro', name: 'CAP Infirmier', shortName: 'CAP Infirmier', backgroundColor: '#0b1220', themeColor: '#0b1220' });
           fs.writeFileSync('app.json', JSON.stringify(a, null, 2));
+          const h = require('crypto').createHash('sha1').update(JSON.stringify(s.code)).digest('hex');
+          fs.writeFileSync('version.txt', h);
           "
+      - name: Verifier si le Snack a change
+        id: check
+        working-directory: app
+        run: |
+          NEW=$(cat version.txt)
+          OLD=$(curl -s https://lonisbouss-cmyk.github.io/cap-infirmier/version.txt || true)
+          echo "Version en ligne : $OLD / Snack : $NEW"
+          if [ "$NEW" = "$OLD" ] && [ "${{ github.event_name }}" = "schedule" ]; then echo "changed=false" >> $GITHUB_OUTPUT; else echo "changed=true" >> $GITHUB_OUTPUT; fi
       - name: Installer les dependances
+        if: steps.check.outputs.changed == 'true'
         working-directory: app
         run: |
           echo "legacy-peer-deps=true" > .npmrc
@@ -46,13 +59,17 @@ jobs:
           npx expo install react-dom react-native-web @expo/metro-runtime
           npx expo install --fix || true
       - name: Exporter la version web
+        if: steps.check.outputs.changed == 'true'
         working-directory: app
         run: |
           npx expo export --platform web
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
+          cp version.txt dist/version.txt
       - uses: actions/upload-pages-artifact@v3
+        if: steps.check.outputs.changed == 'true'
         with:
           path: app/dist
       - id: deploy
+        if: steps.check.outputs.changed == 'true'
         uses: actions/deploy-pages@v4
