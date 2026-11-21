@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+permissions:
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -54,3 +56,10 @@ jobs:
         with:
           name: CAP-Infirmier-APK
           path: app/android/app/build/outputs/apk/release/app-release.apk
+      - name: Publier le lien de telechargement direct
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/android/app/build/outputs/apk/release/app-release.apk CAP-Infirmier.apk
+          gh release delete apk --yes --cleanup-tag -R ${{ github.repository }} || true
+          gh release create apk CAP-Infirmier.apk -R ${{ github.repository }} --title "CAP Infirmier pour Android" --notes "Derniere version de l'application Android CAP Infirmier." --latest
