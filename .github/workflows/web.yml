@@ -19,6 +19,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -58,11 +61,16 @@ jobs:
           npm install
           npx expo install react-dom react-native-web @expo/metro-runtime
           npx expo install --fix || true
+      - name: Generer l'icone
+        if: steps.check.outputs.changed == 'true'
+        working-directory: app
+        run: node ../repo/extras/mkicon.js
       - name: Exporter la version web
         if: steps.check.outputs.changed == 'true'
         working-directory: app
         run: |
           npx expo export --platform web
+          cp ../repo/extras/*.html dist/
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
           cp version.txt dist/version.txt
