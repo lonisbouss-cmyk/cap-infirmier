@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,6 +40,9 @@ jobs:
           npm install
           npx expo install --fix || true
           npm ls react react-native expo || true
+      - name: Generer l'icone
+        working-directory: app
+        run: node ../repo/extras/mkicon.js
       - name: Preparer le projet Android
         working-directory: app
         run: CI=1 npx expo prebuild --platform android
