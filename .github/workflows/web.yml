@@ -71,6 +71,9 @@ jobs:
         run: |
           npx expo export --platform web
           cp ../repo/extras/*.html dist/
+          cp ../repo/extras/sw.js ../repo/extras/manifest.webmanifest dist/
+          cp icon.png dist/icon.png
+          node ../repo/extras/pwa-inject.js dist/index.html
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
           cp version.txt dist/version.txt
