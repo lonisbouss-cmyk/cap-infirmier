@@ -1,0 +1,15 @@
+{
+  "name": "CAP Infirmier",
+  "short_name": "CAP Infirmier",
+  "description": "Révisions gratuites pour les étudiants en soins infirmiers",
+  "lang": "fr",
+  "start_url": "/cap-infirmier/",
+  "scope": "/cap-infirmier/",
+  "display": "standalone",
+  "background_color": "#0B1F3A",
+  "theme_color": "#0B1F3A",
+  "icons": [
+    { "src": "/cap-infirmier/icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "/cap-infirmier/icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}
