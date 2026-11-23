@@ -26,7 +26,9 @@ jobs:
           if [ -z "$S1" ] || [ -z "$S2" ]; then echo "Secrets de signature manquants"; exit 1; fi
           # Le plus long des deux secrets est la cle (base64), le plus court le mot de passe
           if [ ${#S1} -gt ${#S2} ]; then KS="$S1"; PW="$S2"; else KS="$S2"; PW="$S1"; fi
-          echo "$KS" | base64 -d > $RUNNER_TEMP/upload.jks
+          echo "Longueurs : cle=${#KS} caracteres, mot de passe=${#PW} caracteres"
+          printf %s "$KS" | tr -cd 'A-Za-z0-9+/=' | base64 -d > $RUNNER_TEMP/upload.jks
+          PW=$(printf %s "$PW" | tr -d '\r\n')
           echo "::add-mask::$PW"
           echo "KS_PW=$PW" >> $GITHUB_ENV
           keytool -list -keystore $RUNNER_TEMP/upload.jks -storepass "$PW" > /dev/null && echo "Cle de signature OK"
