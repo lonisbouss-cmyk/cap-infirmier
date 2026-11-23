@@ -20,10 +20,16 @@ jobs:
           java-version: 17
       - name: Verifier la cle de signature
         env:
-          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          S1: ${{ secrets.ANDROID_KEYSTORE_BASE64 || secrets.LONIS }}
+          S2: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.LONIS2 }}
         run: |
-          if [ -z "$KS" ] || [ -z "$PW" ]; then echo "Secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD manquants"; exit 1; fi
+          if [ -z "$S1" ] || [ -z "$S2" ]; then echo "Secrets de signature manquants"; exit 1; fi
+          # Le plus long des deux secrets est la cle (base64), le plus court le mot de passe
+          if [ ${#S1} -gt ${#S2} ]; then KS="$S1"; PW="$S2"; else KS="$S2"; PW="$S1"; fi
+          echo "$KS" | base64 -d > $RUNNER_TEMP/upload.jks
+          echo "::add-mask::$PW"
+          echo "KS_PW=$PW" >> $GITHUB_ENV
+          keytool -list -keystore $RUNNER_TEMP/upload.jks -storepass "$PW" > /dev/null && echo "Cle de signature OK"
       - name: Recuperer le code du Snack (derniere version enregistree)
         run: |
           mkdir app && cd app
@@ -57,17 +63,13 @@ jobs:
         run: CI=1 npx expo prebuild --platform android
       - name: Compiler et signer l'AAB
         working-directory: app/android
-        env:
-          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          echo "$KS" | base64 -d > upload.jks
           ./gradlew bundleRelease --no-daemon \
-            -Pandroid.injected.signing.store.file=$PWD/upload.jks \
-            -Pandroid.injected.signing.store.password="$PW" \
+            -Pandroid.injected.signing.store.file=$RUNNER_TEMP/upload.jks \
+            -Pandroid.injected.signing.store.password="$KS_PW" \
             -Pandroid.injected.signing.key.alias=upload \
-            -Pandroid.injected.signing.key.password="$PW"
-          rm -f upload.jks
+            -Pandroid.injected.signing.key.password="$KS_PW"
+          rm -f $RUNNER_TEMP/upload.jks
       - name: Publier l'AAB
         env:
           GH_TOKEN: ${{ github.token }}
