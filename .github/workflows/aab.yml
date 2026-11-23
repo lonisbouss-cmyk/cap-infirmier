@@ -1,0 +1,77 @@
+name: Fabriquer la version Play Store (AAB)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Verifier la cle de signature
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KS" ] || [ -z "$PW" ]; then echo "Secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD manquants"; exit 1; fi
+      - name: Recuperer le code du Snack (derniere version enregistree)
+        run: |
+          mkdir app && cd app
+          curl -sSf -H "Snack-Api-Version: 3.0.0" "https://exp.host/--/api/v2/snack/@lonis57/cap-infirmier" -o snack.json
+          node -e "
+          const fs = require('fs'); const path = require('path');
+          const s = JSON.parse(fs.readFileSync('snack.json', 'utf8'));
+          for (const [f, v] of Object.entries(s.code)) {
+            if (f === 'package.json' || f === 'eas.json' || v.type === 'ASSET' || !v.contents) continue;
+            fs.mkdirSync(path.dirname(f), { recursive: true });
+            fs.writeFileSync(f, v.contents);
+          }
+          fs.writeFileSync('package.json', JSON.stringify({ name: 'cap-infirmier', version: '1.3.0', private: true, main: 'apk-entry.js', dependencies: { expo: '~55.0.0', react: '19.2.0', 'react-native': '0.83.10', 'expo-status-bar': '~55.0.6', '@react-native-async-storage/async-storage': '2.2.0', 'expo-notifications': '~55.0.27', 'expo-constants': '~55.0.17', 'react-native-svg': '15.15.3' } }, null, 2));
+          const a = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          a.expo.android = Object.assign({}, a.expo.android, { versionCode: 100 + Number(process.env.GITHUB_RUN_NUMBER || 0) });
+          a.expo.userInterfaceStyle = 'automatic';
+          fs.writeFileSync('app.json', JSON.stringify(a, null, 2));
+          console.log('versionCode', a.expo.android.versionCode);
+          "
+      - name: Installer les dependances
+        working-directory: app
+        run: |
+          echo "legacy-peer-deps=true" > .npmrc
+          npm install
+          npx expo install --fix || true
+      - name: Generer l'icone
+        working-directory: app
+        run: node ../repo/extras/mkicon.js
+      - name: Preparer le projet Android
+        working-directory: app
+        run: CI=1 npx expo prebuild --platform android
+      - name: Compiler et signer l'AAB
+        working-directory: app/android
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KS" | base64 -d > upload.jks
+          ./gradlew bundleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$PWD/upload.jks \
+            -Pandroid.injected.signing.store.password="$PW" \
+            -Pandroid.injected.signing.key.alias=upload \
+            -Pandroid.injected.signing.key.password="$PW"
+          rm -f upload.jks
+      - name: Publier l'AAB
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/android/app/build/outputs/bundle/release/app-release.aab CAP-Infirmier.aab
+          gh release delete aab --yes --cleanup-tag -R ${{ github.repository }} || true
+          gh release create aab CAP-Infirmier.aab -R ${{ github.repository }} --title "CAP Infirmier - version Play Store (AAB)" --notes "Fichier a importer dans la Google Play Console." --prerelease
